@@ -1,0 +1,64 @@
+--- ENTITY DEFINITIONS ---
+- Bank: Nodes representing financial institutions.
+  Properties: name (String), country (String - use 3-letter ISO code if name is null)
+--- RELATIONSHIP DEFINITIONS ---
+
+    SENT_TO: A directed transaction from one Bank to another.
+
+        Properties: amount (Float), date (String)
+
+        CRITICAL: When calculating totals, ALWAYS use sum(r.amount) where r is the relationship variable.
+        
+
+  --- PATH LOGIC ---
+Task: Find banks appearing as both sender and receiver.
+Template: MATCH (b:Bank) WHERE EXISTS((b)-[:SENT_TO]->()) AND EXISTS(()-[:SENT_TO]->(b)) RETURN b.name, b.country
+Note: Do not use aliases like A or R unless you define them in the MATCH pattern.
+
+Task: Find flow between countries.
+Pattern: > MATCH (b1:Bank)-[r:SENT_TO]->(b2:Bank)
+OPTIONAL MATCH (b1)-[]-(c1:Country)
+OPTIONAL MATCH (b2)-[]-(c2:Country)
+RETURN coalesce(b1.country, c1.code, 'Unknown') AS Origin, coalesce(b2.country, c2.code, 'Unknown') AS Destination, sum(r.amount) AS Total
+
+
+--- COMMON CYPHER PATTERNS (Templates) ---
+Task: Find banks acting as both originator (sender) and beneficiary (receiver)
+Pattern: MATCH (b:Bank) WHERE EXISTS((b)-[:SENT_TO]->()) AND EXISTS(()-[:SENT_TO]->(b)) RETURN b.name, b.country
+
+Task: Calculate total volume by country
+Pattern: MATCH (b:Bank)-[r:SENT_TO]->() RETURN b.country, sum(r.amount) AS total_volume
+
+Task: Transaction path between countries
+Pattern: MATCH (b1:Bank)-[r:SENT_TO]->(b2:Bank) WHERE b1.country <> b2.country RETURN b1.country, b2.country, r.amount
+
+Task: Ranking entities by frequency (e.g., "Most SARs", "Highest volume")
+Pattern: MATCH (b:Bank)-[r:SENT_TO]->() RETURN b.name, count(r) AS frequency ORDER BY frequency DESC LIMIT 5
+Note: You MUST return the count as an alias (AS frequency) to use it in ORDER BY.
+
+Task: Ranking banks by volume or SAR frequency
+Logic: You must MATCH the relationship, COUNT it, and ALIAS it.
+Pattern: MATCH (b:Bank)-[r:SENT_TO]->() 
+         RETURN b.name AS BankName, count(r) AS SAR_Count 
+         ORDER BY SAR_Count DESC 
+         LIMIT 1
+         
+--- RANKING AND AGGREGATION RULES ---
+Rule: If you need to find the "Most", "Highest", or "Top" of something, you MUST follow this structure:
+1. MATCH the relationship with a variable: -[r:SENT_TO]->
+2. RETURN the count as an alias: count(r) AS frequency
+3. ORDER BY that alias: ORDER BY frequency DESC
+
+Rule: If you need to find the volume or total money:
+1. Use sum(t.amount) to get the total dollar value.
+2. Use count(t) to get the number of transactions.
+
+Example for Top Volume: > MATCH (b:Bank)-[t:SENT_TO]->() RETURN b.name, sum(t.amount) AS total_volume ORDER BY total_volume DESC LIMIT 5
+
+Task: Find the bank that appeared in the most transactions
+Correct Pattern: MATCH (b:Bank)-[r:SENT_TO]->() RETURN b.name, count(r) AS frequency ORDER BY frequency DESC LIMIT 1
+
+--- CRITICAL SYNTAX REMINDERS ---
+- Always define relationship variables in brackets: -[r:SENT_TO]->
+- Always define node variables in parentheses: (a:Bank)
+- If you use 'r' in RETURN, you MUST have '[r:SENT_TO]' in the MATCH clause.
